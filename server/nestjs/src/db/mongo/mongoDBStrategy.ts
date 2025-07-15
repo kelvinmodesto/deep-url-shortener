@@ -1,7 +1,9 @@
-import { MongoClient } from 'mongodb';
-import IDb from '@db/base/db.interface.js';
-import getEnvironmentValues from '@utils/getEnvironmentValues';
+import { MongoClient, ObjectId } from 'mongodb';
+import { Injectable } from '@nestjs/common';
+import IDb from '../base/db.interface';
+import { getEnvironmentValues } from '../../config/environment.config.js';
 
+@Injectable()
 export default class MongoDBStrategy implements IDb {
   public model: any;
   public modelName: string;
@@ -15,11 +17,13 @@ export default class MongoDBStrategy implements IDb {
     this.modelName = modelName;
     this.dbURL = this.buildConnectionString();
     this.dbName = this.getDatabase();
-    this.connect();
   }
 
   changeModel(newModel: string): void {
-    this.model = this.client.database(this.dbName).collection(this.modelName);
+    this.modelName = newModel;
+    if (this.client && this.database) {
+      this.model = this.database.collection(this.modelName);
+    }
   }
 
   getDatabase(): string {
@@ -40,15 +44,26 @@ export default class MongoDBStrategy implements IDb {
         DB_PORT_MONGO: port,
       },
     } = getEnvironmentValues();
-    return `${db}://${user}:${pass}@${host}:${port}/${name}`;
+
+    // Build connection string with or without authentication
+    if (user && pass) {
+      return `${db}://${user}:${pass}@${host}:${port}/${name}`;
+    } else {
+      return `${db}://${host}:${port}/${name}`;
+    }
   }
 
-  connect() {
-    const client = new MongoClient();
-
-    client.connectWithUri(this.dbURL);
-    this.client = client;
-    this.model = this.client.database(this.dbName).collection(this.modelName);
+  async connect(): Promise<void> {
+    try {
+      this.client = new MongoClient(this.dbURL);
+      await this.client.connect();
+      this.database = this.client.db(this.dbName);
+      this.model = this.database.collection(this.modelName);
+      console.log(`Connected to MongoDB: ${this.dbName}/${this.modelName}`);
+    } catch (error) {
+      console.error('MongoDB connection error:', error);
+      throw error;
+    }
   }
 
   getClient(): MongoClient {
@@ -56,27 +71,67 @@ export default class MongoDBStrategy implements IDb {
   }
 
   async isConnected(): Promise<boolean> {
-    const names = await this.client.listDatabases();
-    return names.length > 0;
-  }
-
-  async create(item: any = {}) {
-    return await this.model.insertOne(item);
-  }
-
-  async read(item: any = {}, many: boolean = false) {
-    if (many) {
-      return await this.model.find(item);
-    } else {
-      return await this.model.findOne(item);
+    try {
+      if (!this.client) return false;
+      await this.client.db('admin').admin().ping();
+      return true;
+    } catch (error) {
+      console.error('MongoDB connection check failed:', error);
+      return false;
     }
   }
 
-  async update(id: string, item: any = {}) {
-    return await this.model.updateOne({ _id: { $oid: id } }, { $set: item });
+  async create(item: any = {}): Promise<ObjectId> {
+    try {
+      const result = await this.model.insertOne(item);
+      return result.insertedId;
+    } catch (error) {
+      console.error('MongoDB create error:', error);
+      throw error;
+    }
   }
 
-  async delete(id: string, item = {}) {
-    return await this.model.deleteOne({ _id: id });
+  async read(query: any = {}, many: boolean = false): Promise<any> {
+    try {
+      if (many) {
+        return await this.model.find(query).toArray();
+      } else {
+        return await this.model.findOne(query);
+      }
+    } catch (error) {
+      console.error('MongoDB read error:', error);
+      throw error;
+    }
+  }
+
+  async update(id: string, item: any = {}): Promise<any> {
+    try {
+      const objectId = new ObjectId(id);
+      return await this.model.updateOne({ _id: objectId }, { $set: item });
+    } catch (error) {
+      console.error('MongoDB update error:', error);
+      throw error;
+    }
+  }
+
+  async delete(id: string): Promise<any> {
+    try {
+      const objectId = new ObjectId(id);
+      return await this.model.deleteOne({ _id: objectId });
+    } catch (error) {
+      console.error('MongoDB delete error:', error);
+      throw error;
+    }
+  }
+
+  async close(): Promise<void> {
+    try {
+      if (this.client) {
+        await this.client.close();
+        console.log('MongoDB connection closed');
+      }
+    } catch (error) {
+      console.error('Error closing MongoDB connection:', error);
+    }
   }
 }

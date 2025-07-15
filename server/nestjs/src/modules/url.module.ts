@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { UrlModule } from './modules/url.module';
 import { UrlController } from '@controllers/url.controller';
-import { UrlService } from '@services/url.service';
+import { UrlService } from 'services/url.service';
 
 @Module({
-  imports: [UrlModule],
   controllers: [UrlController],
   providers: [UrlService],
+  exports: [UrlService],
 })
-export class AppModule {}
+export class UrlModule {}
