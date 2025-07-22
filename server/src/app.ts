@@ -35,7 +35,14 @@ app.use(
 // CORS configuration
 app.use(
   cors({
-    origin: serverConfig.corsOrigin,
+    origin:
+      serverConfig.nodeEnv === 'development'
+        ? [
+            'http://localhost:3001',
+            'http://localhost:5173',
+            'http://localhost:3000',
+          ]
+        : serverConfig.corsOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],

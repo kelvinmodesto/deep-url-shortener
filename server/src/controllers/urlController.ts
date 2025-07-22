@@ -18,6 +18,7 @@ export class UrlController {
     const response: ApiResponse = {
       success: true,
       data: {
+        id: url._id,
         originalUrl: url.originalUrl,
         shortUrl: url.shortUrl,
         shortCode: url.shortCode,

@@ -5,11 +5,10 @@ import { Url, CreateUrlRequest, GetUrlsQuery, ClickEvent } from '../types';
 import { serverConfig } from '../config';
 
 export class UrlService {
-  private urlsCollection: Collection<Url>;
+  private urlsCollection: Collection<Url> | null = null;
 
   constructor() {
     // Initialize collection lazily to avoid database connection issues during import
-    this.urlsCollection = null as any;
   }
 
   private getCollection(): Collection<Url> {
@@ -28,7 +27,7 @@ export class UrlService {
       shortCode = await this.generateUniqueShortCode();
     } else {
       // Check if custom code already exists
-      const existingUrl = await this.urlsCollection.findOne({ shortCode });
+      const existingUrl = await this.getCollection().findOne({ shortCode });
       if (existingUrl) {
         throw new Error('Custom short code already exists');
       }
@@ -56,15 +55,17 @@ export class UrlService {
   }
 
   async getUrlByShortCode(shortCode: string): Promise<Url | null> {
-    return await this.getCollection().findOne({
+    const result = await this.getCollection().findOne({
       shortCode,
       isActive: true,
-      $or: [
-        { expiresAt: { $exists: false } },
-        { expiresAt: { $type: 'null' } },
-        { expiresAt: { $gt: new Date() } },
-      ],
     } as any);
+
+    // Check expiration manually if URL exists
+    if (result && result.expiresAt && result.expiresAt <= new Date()) {
+      return null;
+    }
+
+    return result;
   }
 
   async getUrlById(id: string | ObjectId): Promise<Url | null> {
